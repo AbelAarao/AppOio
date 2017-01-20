@@ -1,0 +1,276 @@
+
+Instalação e iniciação programática de aplicações no Websphere Application Server            Network Deployment 		 O servidor de aplicações Webpshere Application Server permite a instalação de            aplicações através da linguagem de progração Java, o que pode vantajoso quanto a            instalação necessita ser integrada com uma ferramenta de instalação de um produto, ou            necessita ser altamente personalizada. Neste artigo, iremos percorrer os passos e            considerações principais ao utilizar esta abordagem, especialmente quando instalando na            edição Network Deployment do servidor Websphere.0 Comentários		 Fábio Negrello, Engenheiro de Software,  IBMFechar [x] Fábio Negrello tem mais de 12 anos de experiência em desenvolvimento de software, trabalhando nas áreas de segurança de aplicações, aplicações web, ferramentas de desenvolvimento e ferramentas para automação de testes. Atualmente trabalha como engenheiro de software no laboratório da IBM Brazil.Perfil no MydeveloperWorks05/Dez/2014ÍndiceIntroduçãoCliente de AdministraçãoRecuperando o nome da plataformaCriando o provedor JDBC e a fonte de dadosEspecificando mapeamento de distribuição                (bindings)Criando um listener para o processo de                instalaçãoInstalando a aplicaçãoIniciando a aplicaçãoRodando o exemplo WASInstallerConclusãoReferênciasDownloadComentários     Desenvolva e implemente seu próximo aplicativo na plataforma de cloud do IBM Bluemix.Comece seu trial gratuitoIntroduçãoO servidor Websphere provê um conjunto muito completo de serviços que aplicações                podem utilizar, e serve como uma plataforma para desenvolvimento e distribuição                destas aplicações. O suporte para administração de aplicações provê funções tais                como instalação e desinstalação, edição de informações ou código de aplicações já                instaladas, bem como exportação. O Websphere 8.5 suporta os seguintes modos de                instalação de aplicações:Console de administração – instalação realizada manualmente através das                    instruções do guia localizado em Aplicações > Nova Aplicação;wsadmin – realizada pela invocação do objeto AdminApp em um script ou em um                    prompt de comando. Pode ser utilizada para automatizar a instalação, mas os                    scripts devem ser escritos em Jacl ou Jython;Programaticamente – através da utilização de Java Management Extensions (JMX)                    Beans. Provê uma integração mais simples com ferramentas de instalação escritas                    em Java, bom como um maior controle sobre o que está sendo feito. Muitos                    aspectos da aplicação podem ser personalizados programaticamente, tais como:                    mapeamento de segurança, características de distribuição (nós, clusters ou                    servidores onde vai ser realizada a distribuição da aplicação), língua padrão e                    política de carregamento de classes;Rapid deployment tools (ferramentas de distribuição rápidas) – através da                    criação de um projeto que pode ser usado para testar e distribuir artefatos J2EE                    rapidamente em um servidor. Provê pouco controle sobre o que está sendo feito,                    uma vez que a ideia é esconder as complexidades de instalação do usuário.A opção 3, programaticamente, é adequada em qualquer um destes casos:Um número grande de aspectos precisa ser personalizado baseando-se em                    informações fornecidas pelo usuário ou por um arquivo de configuração que o                    administrador pode editar para se adequar as necessidades do ambiente do                    cliente.A instalação necessita ser automatizada: a opção 2 é também adequada uma vez que                    permite que você execute scripts em Jacl e Jython, mas qualquer iteração com o                    usuário ou outra ferramenta (normalmente escrita em Java) pode não ser tão                    simples como quando feita pela opção 3.O time responsável pela escrita do instalador tem habilidade de programação                    Java: Jython, apesar de poderoso, pode não ser tão simples de integrar e                    interagir como um conjunto de interfaces Java;Você possui um instalador escrito em Java, que suporta diferentes servidores.                    Neste caso, a API que detalharemos aqui pode ser facilmente integrada no código                    do seu instalador.Neste artigo iremos realizar a instalação programática de uma aplicação de exemplo,                que possui uma fonte e dados e configurações de segurança, cobrindo os seguintes                passos principais:Criação do cliente de administração (AdminClient);Recuperação do nome da plataforma do Websphere (Base ou Network                    Deployment);Criação do provedor JDBC e a fonte de dados utilizada pela aplicação;Especificação do mapeamento de distribuição (servidores e papéis de                    segurança);Criação do listener para o processo de instalação;Instalação da aplicação;Verificação do estado de distruição através de listeners;Iniciação da aplicação;Voltar para parte superiorCliente de AdministraçãoO servidor de aplicações Websphere disponibiliza serviços de administração através de                operações em MBeans. Os MBeans podem ser acessados através da ferramenta de linha de                comando wsadmin, ou programaticamente através da interface Java JMX, que é nosso                objetivo. O MBean responsável pelas operações de instalação e inicialização é o                     AppManagement. As operações principais são:installApplication – instala a aplicação no servidor (edição Base                    do Websphere) ou a distribui no gerenciador de distribuição (deployment manager)                    do Network Deployment Edition. Permite especificar opções de instalação tais                    como língua padrão, política de carregamento de classes, entre outras. As                    configurações de distribuição (bindings) devem ser especificadas dentre as                    opções, uma vez que elas são obrigatórias para que o servidor possa mapear as                    configurações para cada instância específica de servidor onde a aplicação vai                    ser instalada.startApplication – por padrão inicia a aplicação em todos os                    servidores mapeados durante a instalação, mas você pode especificar somente um                    subconjunto de servidores onde a aplicação deve ser iniciada.getDistributionStatus – este método atualiza o estado de                    distribuição da aplicação e faz com que uma notificação seja enviada para o                    ouvinte (listener). Especialmente útil ao se instalar no Network Deployment                    Edition (ND). Quando usado em conjunto com um listener, uma lista será retornada                    nas propriedades de notificação, indicando o estado de distribuição dos binários                    da aplicação em cada nó do(s) cluster(s).A interface AdminClient provê APIs do lado cliente para invocar os                MBeans no servidor que iremos utilizar para realizar todos as operações necessárias                para a instalação programática. Ele delega as chamadas para o conector JMX no                servidor através de um intermediador local que implementa a interface                     AdminClientProxy, escondendo a complexidade associada com a                comunicação. A maioria dos métodos definidos na interface são mapeados de                     javax.management.MBeanServer, que é a interface JMX padrão para                manipulação de MBeans através do lado cliente.Antes da criação do cliente de administração é necessário definir as propriedades de                conexão com o servidor, como mostrado no trecho abaixo:01        Properties props = new Properties();
+02        props.setProperty(AdminClient.CONNECTOR_TYPE,
+03          AdminClient.CONNECTOR_TYPE_SOAP);
+04        props.setProperty(AdminClient.CONNECTOR_HOST, host);
+05        props.setProperty(AdminClient.CONNECTOR_PORT, port);
+06        props.setProperty(AdminClient.USERNAME, user);
+07        props.setProperty(AdminClient.PASSWORD, password);
+08        props.setProperty(AdminClient.CONNECTOR_SECURITY_ENABLED, "true");
+09        
+10        setSecurityProperties(props);
+11        SSLConfigManager.getInstance().initializeClientSSL();
+12        
+13        RetrieveSignersHelper rsHelper = RetrieveSignersHelper.getInstance();
+14        String[] temp1 = new String[] { "NodeDefaultTrustStore",
+15          "ClientDefaultTrustStore", "-autoAcceptBootstrapSigner", 
+16          "-host", host, "-port", port, "-17user", user, "-conntype",
+17          AdminClient.CONNECTOR_TYPE_SOAP, "-quiet" };
+18        int resultCode = rsHelper.callRetrieveSigners(temp1);O valor da propriedade CONNECTOR_SECURITY_ENABLED deve ser true                quando a segurança administrativa do servidor está habilitada. A segurança                administrativa requer que os usuários se autentiquem antes de obter o controle                administrativo do servidor de aplicativos, e isto é altamente recomendado em um                ambiente de produção para evitar acesso ou alteração indevidos da configuração do                servidor ou das próprias aplicações instaladas. Portanto, iremos considerar                segurança habilitada nos passos seguintes.Além de username e password, outras propriedades são também requeridas ao se realizar                uma conexão SSL. Estas propriedades podem ser especificadas como propriedades de                sistema Java (através de System.setProperty ou parâmetros de linha de                comando do tipo -Dpropriedade=valor) ou podem ser passadas diretamente                como parâmetro ao invocar o método AdminClientFactory.createAdminClient                    (Properties). A tabela a seguir contém as demais propriedades                obrigatórias para que se possa estabelecer a conexão SSL:com.ibm.ssl.trustStore Caminho para a                        truststorecom.ibm.ssl.trustStoreType   PKCS12 ou                        JKScom.ibm.ssl.keyStore Caminho para a                        keystorecom.ibm.ssl.keyStoreType PKCS12 ou                        JKScom.ibm.SSL.ConfigURL Caminho para                                ssl.client.propsO arquivo ssl.client.props é o mesmo que pode ser encontrado no diretório properties                do seu profile no Websphere. Um arquivo de exemplo também foi fornecido para                download neste artigo.Considerando keystore e truststore, uma abordagem é utilizar arquivos temporários,                que podem ser removidos imediatamente após a instalação. A vantagem desta abordagem                é que a truststore e keystore serão criadas automaticamente ao se chamar o método                     callRetrieveSigners (apresentado a seguir), simplificando o                trabalhado do administrador. Entretando, isto pode ser realizado somente em                ambientes considerados seguros. Por favor refira-se ao método                     configureSSL no exemplo WASInstaller.java para                detalhes adicionais sobre como criar os arquivos temporários em Java.Uma vez que as propriedades requeridas estão definidas, é necessário realizar a                chamada ao método initializeClientSSL, como mostrado na linha 11 do                trecho acima, para finalizar a configuração para a comunicação SSL.Uma vez que a configuração para o SSL está pronta, os signer certificates devem ser                importados na truststore do cliente. O método callRetrieveSigners da                classe utilitária RetrieveSignersHelper pode ser utilizada para se                recuperar o assinador do servidor e adicioná-lo na truststore do cliente em tempo de                execução (linha 18 do trecho acima). Como explicado acima, este método não deverá                ser utilizado se o ambiente não for seguro, e a truststore do servidor deverá ser                importada manualmente na truststore do cliente.Uma vez realizada a preparação para permitir a comunicação entre o cliente e o                servidor, podemos criar o cliente de administração através da seguinte chamada ao                método createAdminClient:Clique aqui para ver lista de códigosFechar [x]AdminClient adminClient;
+        try {
+            adminClient = AdminClientFactory.createAdminClient(props);
+        } catch (ConnectorException e) {
+            LOG.log(Level.SEVERE, "The installer was not able to connect to the 		      application server:" + e.getLocalizedMessage());
+        }Quando a instalação da aplicação é feita no Websphere Network Deployment edition, o                cliente normalmente deve ser conectado com o deployment manager porque todos os                servidores do cluster ou célula podem ser controlados através deste processo. Ao se                realizar uma requisição para um MBean no deployment manager, ele é automaticamente                redirecionado para o servidor onde se deseja executar a operação. Na classe de                exemplo, iremos supor que você está se conectando com o deployment manager porque                vamos monitor a distribuição da aplicação em todos os nós do cluster e isto somente                é possível através do MBean localizado neste processo.Voltar para parte superiorRecuperando o nome da plataformaÉ necessário determinar o nome da plataforma em que estamos instalando porque a                verificação se a aplicação foi distribuída com sucesso é necessária somente na                plataforma Network Deployment (ND). Além disso, dependendo da plataforma, iremos                receber eventos de diferentes MBeans para saber se a aplicação foi corretamente                instalada.Uma forma de determinar o nome da plataforma programaticamente é consultando qualquer                MBean do tipo Server. Esse MBean irá conter o atributo platformName, cujo valor é                Base ou ND.Clique aqui para ver lista de códigosFechar [x]public static String getPlatformName(AdminClient adminClient) throws 	MalformedObjectNameException, ConnectorException, AttributeNotFoundException, 	InstanceNotFoundException, MBeanException, ReflectionException {
+
+        ObjectName nodeSync = new ObjectName("WebSphere:*,type=Server");
+        Set queryResult = adminClient.queryNames(nodeSync, null);
+        ObjectName serverBean = (ObjectName) queryResult.iterator().next();
+
+        Object platform = adminClient.getAttribute(serverBean, "platformName");
+        String wasPlatform = platform.toString();
+
+        if (WAS_ND_PLATFORM.equals(wasPlatform)) {
+            Object processType = adminClient.getAttribute(serverBean, "processType");
+            String processTypeStr = processType.toString();
+
+            if ("UnManagedProcess".equals(processTypeStr)) {
+                wasPlatform = WAS_BASE_PLATFORM;
+            }
+        }
+
+        return wasPlatform;
+    }Se o servidor é ND, nós ainda temos que verificar se ele é um servidor em cluster ou                não. Quando a consulta é realizada, se o AdminClient está conectado a                um servidor que não está em cluster, somente o servidor é retornado e o seu                processType tem o valor UnManagedProcess. Ao se instalar em um cluster, o                     AdminClient é conectado a um deployment manager, e neste caso a                consulta retorna o próprio deployment manager, com processType DeploymentManager, os                agentes dos nós, com tipo NodeAgent, e todos os servidores gerenciados, com tipo                ManagedProcess. Uma vez que os passos para um servidor não gerenciado são os mesmo                para as edições Base e ND, o método de exemplo getPlatformName retorna                Base para manter o mesmo comportamento durante a instalação.Voltar para parte superiorCriando o provedor JDBC e a fonte de dadosA criação do provedor JDBC e da fonte de dados pode ser feita programaticamente                através da API ConfigService, ou manualmente como um passo manual de                instalação. Um aspecto importante a ser considerado é que a fonte de dados pode ser                criada no nível de célula, nó ou servidor, dependendo de onde se vai distribuir a                aplicação, mas o provedor deve ser definido no mesmo escopo.Além disso, não é possível definir no nível de cluster, portanto você deverá criar no                nível de célula, que é visível a todos os nós, ou criar em cada nó ou servidor que                pertence aos seus clusters. O código a seguir resolve o nível de célula e cria o                provedor de dados neste escopo:01        ConfigServiceProxy configService = new ConfigServiceProxy(adminClient);
+02        Session session = new Session();
+03
+04        String cellScope = "Cell=" + cell;
+05        ObjectName[] name = configService.resolve(session, cellScope);
+06        ObjectName resolvedProviderScope = name[0];
+07
+08        // Prepare the attribute list
+09        AttributeList providerAttrList = new AttributeList();
+10        providerAttrList.add(new Attribute("name", providerName));
+11        providerAttrList.add(new Attribute("implementationClassName", 
+12 		implementationClassName));
+13        providerAttrList.add(new Attribute("description", providerDescription));
+14        providerAttrList.add(new Attribute("providerType", providerType));
+15
+16        ObjectName jdbcProv = configService.createConfigData(session, scope,
+17		 "JDBCProvider", "JDBCProvider", providerAttrList);
+18        configService.addElement(session, jdbcProv, "classpath", jdbcClasspath, -1);A classe ConfigServiceProxy é um proxy para o MBean ConfigService, que permite                alterar o repositório de configurações do Websphere. Através dele, criamos um                provedor JDBC no nível de célula, passando a classe de implementação e o tipo do                provedor em providerAttrList (linhas 16/17). O código adicional para criar uma fonte                de dados pode ser encontrado na classe de exemplo WASInstaller. Para                maiores informação sobre criação de fontes de dados, consulte Creating and configuring a JDBC provider and data source using the JMX                API.Voltar para parte superiorEspecificando mapeamento de distribuição                (bindings)Os bindings são usados para mapear os descritores de uma aplicação a um determinado                ambiente de execução (célula, servidor ou nó). A instância do                     AppDeploymentController é utilizada para preparar o EAR da                aplicação antes de distribuí-lo. Através do AppDeploymentController,                você pode iterar sobre as tarefas que pode ser realizadas no EAR em cada módulo da                aplicação.Aqui iremos tratar dois bindings que são essenciais para a maioria das aplicações:                módulo para servidor, e usuário para papel. Para uma lista completa, por favor                refira-se a Preparing an application for installation using programming.Mapeando módulos a servidoresOs bindings AppConstants.APPDEPL_MODULE_TO_SERVER são necessários para                informar onde a aplicação será distribuida. No caso da plataforma ND, cada binding                pode ser um servidor ou cluster. O formato para bindings de servidores é:cell=cellName,node=nodeName,server=serverNamePara clusters o formato é:cell=cellName,cluster=clusterNameNo binding você pode ter qualquer número de servidores ou clusters separados por um                sinal de mais (+), prefixado por Websphere. Por exemplo, para mapear uma aplicação                para um servidor e um cluster específico:Websphere:cell=cellName,node=nodeName,server=serverName+Websphere:cell=cellName,cluster=clusterNameOs bindings devem ser adicionados às opções que são passadas para o método de                instalação (que será discutido a seguir):01        Hashtable prefs = new Hashtable();
+02        prefs.put(AppConstants.APPDEPL_LOCALE, Locale.getDefault());
+03
+04        Properties defaultBnd = new Properties();
+05        prefs.put(AppConstants.APPDEPL_DFLTBNDG, defaultBnd);
+06        defaultBnd.put(AppConstants.APPDEPL_DFLTBNDG_VHOST, "default_host");
+07
+08        AppDeploymentController controller = AppDeploymentController.readArchive(
+09		earPath, prefs);
+10        Hashtable options = controller.getAppDeploymentSavedResults();
+11        Hashtable module2server = new Hashtable();
+12        module2server.put(warName + "+WEB-INF/web.xml", bindings);
+13        options.put(AppConstants.APPDEPL_MODULE_TO_SERVER, module2server);Na linha 13 do trecho acima adicionamos às opções de instalação o binding da                aplicação warName + "+WEB-INF/web.xml".Mapeando usuário a papéis (roles)Uma forma de restringir o acesso a determinados recursos em uma aplicação web, é                através da definição de security constraints no descritor web.xml. Na security                constraint você pode limitar a acesso a diferentes URLs por determinados papéis. A                seguir segue um trecho de um arquivo xml com a definição de uma security constraint                para o papel Consultor:<security-constraint>
+		<display-name>Security Constraints para Consultor</display-name>
+		<web-resource-collection>
+			<web-resource-name>was.installer.sample.web</web-resource-name>>
+			<url-pattern>/</url-pattern>
+			<url-pattern>/consulta</url-pattern>
+		</web-resource-collection>
+		<auth-constraint>
+			<role-name>Consultor</role-name>
+		</auth-constraint>
+		<user-data-constraint>
+			<transport-guarantee>NONE</transport-guarantee>
+		</user-data-constraint>
+    </security-constraint>
+         
+    <security-role>
+		<description>Permite operacoes de consulta na aplicacao de exemplo</description>
+		<role-name>Consultor</role-name>
+    </security-role>A tarefa chamada MapRolesToUsers permite que você mapeie usuários ou grupos a um                determinado papel definido no descritor web.xml. Vários usuários ou grupos para um                mesmo papel são separados por “|”. Os valores permitidos para os papéis especiais                     role.everyone e role.all.auth.user são                     AppConstants.YES_KEY or AppConstants.NO_KEY.. O exemplo a seguir                mapeia o papel Consultor aos usuários UserA e UserB, e mapeia o usuário                Administrator ao papel AdminRole. Note que estes papéis devem ser definidos no                web.xml do módulo sendo mapeado.String consultRole = "Consultor";
+        String adminRole = "AdminRole";
+        String consultRoleUsers = "UserA|UserB";
+        String consultRoleGroups = "";
+        String adminRoleUsers = "Administrator";
+        String adminRoleGroups = "";
+
+        int roleColumn = -1;
+        int userColumn = -1;
+        int groupColumn = -1;
+        int allAuthColumn = -1;
+        int everyOneColumn = -1;
+
+        String[] colNames = task.getColumnNames();
+        for (int col = 0; col < colNames.length; col++) {
+            String colName = colNames[col];
+            if (colName.equals("role")) {
+                roleColumn = col;
+            } else if (colName.equals("role.user")) {
+                userColumn = col;
+            } else if (colName.equals("role.group")) {
+                groupColumn = col;
+            } else if (colName.equals("role.all.auth.user")) {
+                allAuthColumn = col;
+            } else if (colName.equals("role.everyone")) {
+                everyOneColumn = col;
+            }
+        }
+
+        String[][] data = task.getTaskData();
+        for (int j = 1; j < data.length; j++) {
+            if (data[j][roleColumn].equals(consultRole)) {
+                data[j][userColumn] = consultRoleUsers;
+                data[j][groupColumn] = consultRoleGroups;
+                data[j][allAuthColumn] = AppConstants.NO_KEY;
+                data[j][everyOneColumn] = AppConstants.NO_KEY;
+                consultRoleUpdated = true;
+            } else if (data[j][roleColumn].equals(adminRole)) {
+                data[j][userColumn] = adminRoleUsers;
+                data[j][groupColumn] = adminRoleGroups;
+                data[j][allAuthColumn] = AppConstants.NO_KEY;
+                data[j][everyOneColumn] = AppConstants.NO_KEY;
+                adminRoleUpdated = true;
+            }
+
+        }Voltar para parte superiorCriando um listener para o processo de                instalaçãoA interface AdminClient provê dois métodos para a criação de listeners:addNotificationListener – Adiciona um listener para exatamente um MBean.addNotificationListenerExtended - Adiciona um listener a vários MBeans. Aceita                    uma consulta com caracteres coringa (*).O listener pode ser utilizado para receber notificações de MBeans específicos,                dependendo da consulta que você realizar, e também escutar tipos específicos de                eventos. No nosso caso, iremos receber notificações do MBean AppManagement, que é                responsável pelas funções de administração.Ao rodar no WAS ND, nós temos uma instância deste MBean para cada servidor e também                uma instância no deployment manager. Uma vez que estamos interessados na                distribuição do estado da aplicação, iremos ouvir somente notificações do deployment                manager, que é responsável pela distribuição da aplicação nós servidores ou clusters                da célula. No caso do WAS Base, há somente uma instância, portando não precisamos                especificar o tipo. O código a seguir cria um ObjectName que será                utilizado na consulta:String mbeanQuery = "WebSphere:type=AppManagement,";
+            if (WAS_ND_PLATFORM.equals(wasPlaform)) {
+                // when running on a cluster, we must monitor events from the
+                // deployment manager.
+                mbeanQuery += "process=dmgr,";
+            }
+            mbeanQuery += "*";
+            ObjectName appManagementName = new ObjectName(mbeanQuery);O listener deve implementar a interface                     javax.management.NotificationListener, que define o método                     handleNotification. O exemplo a seguir define também alguns métodos                auxiliares para especificar o tipo de evento que queremos tratar:Clique aqui para ver lista de códigosFechar [x]public static class InstallerListener implements NotificationListener {
+        private String eventTypeToCheck;
+        private AppNotification event;
+
+        public void handleNotification(Notification notf, Object handback) {
+            AppNotification ev = (AppNotification) notf.getUserData();
+            if (ev.taskName.equals(eventTypeToCheck)
+                    && (AppNotification.STATUS_COMPLETED.equals(ev.taskStatus) || 					AppNotification.STATUS_FAILED.equals(ev.taskStatus))) {
+                this.event = ev;
+                synchronized (this) {
+                    this.notify();
+                }
+            }
+        }
+
+        public void setEventTypeToCheck(String eventTypeToCheck) {
+            this.eventTypeToCheck = eventTypeToCheck;
+        }
+
+        public AppNotification getEvent() {
+            return event;
+        }
+    }O método a seguir cria o listener mostrado acima e o registra no AdminClient                proxy:private static InstallerListener addListener(AdminClient adminClient, 
+	final Object handback, final String eventTypeToCheck, 
+	ObjectName appManagementName) throws ConnectorException {
+
+        InstallerListener listener = new InstallerListener();
+
+        // Create notification filter
+        NotificationFilterSupport filter = new NotificationFilterSupport();
+        filter.enableType(AppConstants.NotificationType);
+
+        Set queryResult = adminClient.queryNames(appManagementName, null);
+        Iterator iter = queryResult.iterator();
+        ObjectName on = (ObjectName) iter.next();
+        listener.setEventTypeToCheck(eventTypeToCheck);
+
+        adminClient.addNotificationListenerExtended(on, listener, 
+		filter, handback);
+
+        return listener;
+    }O próximo trecho chama o método acima para criar o listener:Clique aqui para ver lista de códigosFechar [x]// Add the listener.
+    InstallerListener listener = addListener(adminClient, "Install: " + appName, 	AppNotification.INSTALL, appManagementName);Voltar para parte superiorInstalando a aplicaçãoPara instalar a aplicação, devemos prover o caminho para o arquivo EAR, o nome da                aplicação e as opções contendo os bindings:proxy.installApplication(earPath, appName, options, null);Uma vez que o método installApplication é invocado, precisamos esperar                que a notificação seja enviada ao listener. A notificação é enviada ao método                     handleNotification, com um status de STATUS_COMPLETED ou                    STATUS_FAILED.Clique aqui para ver lista de códigosFechar [x]synchronized (listener) {
+                listener.wait();
+            }
+     if (!AppNotification.STATUS_COMPLETED.equals(listener.getEvent().taskStatus)) {
+          throw new Exception("The installer was unable to install the ear file due to: " 		+ listener.getEvent());
+     }Voltar para parte superiorIniciando a aplicaçãoAntes de iniciar a aplicação no WAS ND, precisamos ter certeza que a aplicação foi                distribuída em todos os nós onde que queremos que ela seja iniciada. Podemos                utilizar a mesma interface de listener que usamos para verificar a instalação, mas                precisamos verificar o tipo de evento                     AppNotification.DISTRIBUTION_STATUS_NODE.O estado da distribuição é retornado como uma composição de estados individuais de                distribuição em cada nó, separados por um sinal de mais (+). Por exemplo, o próximo                estado indica que a aplicação foi distribuída no nó Node01:WebSphere:cell=Cell01,node=Node01,distribution=false,expansion=inprogressO código abaixo retorna somente depois que a aplicação foi distribuída em todos os                nós especificados, ou depois de 30 notificações. O método                     getDistributionStatus precisa ser usado em cada iteração para                disparar a notificação com o último estado de distribuição.if (WAS_ND_PLATFORM.equals(wasPlaform)) {
+            listener = addListener(adminClient, "Expand: " + appName,
+                    AppNotification.DISTRIBUTION_STATUS_NODE, appManagementName);
+            
+            String distribution = null;
+            String node = null;
+            String appStatus = null;
+            int count = 0;
+            
+            // Status example:
+            // WebSphere:cell=Cell01,node=Node01,distribution=false,expansion=inprogress+
+            // WebSphere:cell=Cell01,node=Node01,distribution=true,expansion=notprocessing
+            Pattern pattern = 
+		Pattern.compile("(.+?),distribution=([^\\,]+),expansion=([^,+]+)\\+?");
+            
+            Set<String> doneNodes = new HashSet<String>(1);
+            Set<String> notDoneNodes = new HashSet<String>(1);
+            
+            do {
+                proxy.getDistributionStatus(appName, new Hashtable(), null);
+                synchronized (listener) {
+                    listener.wait(1000);
+                }
+                AppNotification event = listener.getEvent();
+                if (event != null) {
+                    Properties props = event.props;
+                    if (props != null) {
+                        appStatus = props.getProperty(
+				AppNotification.DISTRIBUTION_STATUS_COMPOSITE);
+                        if (LOG.isLoggable(Level.FINE)) {
+                            LOG.fine("AppStatus(" + count + "): " + appStatus);
+                        }
+                        if (appStatus != null) {
+                            Matcher matcher = pattern.matcher(appStatus);
+                            while (matcher.find()) {
+                                node = matcher.group(1);
+                                distribution = matcher.group(2);
+                                if (AppNotification.DISTRIBUTION_DONE.equals(distribution)) {
+                                    doneNodes.add(node);
+                                    notDoneNodes.remove(node);
+                                } else if (!doneNodes.contains(node)) {
+                                    notDoneNodes.add(node);
+                                }
+                            }
+                        }
+                    }
+                }
+                Thread.sleep(5000);
+                count++;
+            } while (distribution == null || (notDoneNodes.size() > 0 && count < 30));
+            
+            if (LOG.isLoggable(Level.FINE)) {
+                LOG.fine("Final Distribuition Status: " + appStatus);
+                LOG.fine("Distribution done: " + doneNodes);
+                LOG.fine("Distribution not done: " + notDoneNodes);
+            }
+}Depois que a distribuição é completada, podemos efetivamente iniciar a aplicação:tring startResult = proxy.startApplication(appName, new Hashtable(), null);
+      if (LOG.isLoggable(Level.FINE)) {
+         LOG.fine(appName + " started in the following targets: " + startResult);
+      }
+      if (null == startResult) {
+	  throw new Exception("Could not start the application "+appName);
+      }Voltar para parte superiorRodando o exemplo WASInstallerUma aplicação (sample.ear) e um instalador de exemplo WASInstaller.java                estão disponíveis em um arquivo compactado (instalador-exemplo.zip) na seção de                downloads. O exemplo de instalador WASInstaller.java contém somente um                método principal e alguns métodos auxiliares. As propriedades necessárias para a                instalação estão especificadas no arquivo install.properties:Clique aqui para ver lista de códigosFechar [x]host=localhost
+port=8879
+user=Administrator
+password=password
+earPath=C:\\temp\\sample.ear
+warName=sample.web.war
+cell=IBM-AINMA1TKNG9Cell01
+bindings=WebSphere:cell=IBM-AINMA1TKNG9Cell01,cluster=ASCluster
+appName=SampleApp
+providerName=SampleApp_JDBC
+jdbcClasspath=C:/Program Files/IBM/SQLLIB/java/db2jcc.jar;C:/Program Files/IBM/SQLLIB/java/db2jcc_license_cu.jar;
+jdbcType=DB2
+implementationClassName=com.ibm.db2.jcc.DB2XADataSource
+providerType=DB2 Universal JDBC Driver Provider (XA), version 5.0
+dsName=SAMPLE_DS
+dataSourceDescription=JDBC data source to SAMPLE database
+jdbcName=SAMPLE
+jdbcHost=localhost
+jdbcPort=50000
+helperClassName=com.ibm.websphere.rsadapter.DB2UniversalDataStoreHelper
+jdbcUser=db2admin
+jdbcPassword=passwordComente ou edite o método updateTaskMapRolesToUsers para refletir os roles definidos                no seu web.xml. Para informações sobre como criar usuários e roles, consulte IBM WebSphere Application Server - Administration and configuration                guide.O instalador de exemplo requer uma base de dados DB2. O nome da base de dados                (jdbcName) e outras informações de acesso devem ser configuradas no arquivo                     install.properties.Os próximos arquivos jar devem estar no CLASSPATH:<WAS_HOME>\runtimes\com.ibm.ws.admin.client_8.5.0.jar
+<WAS_HOME>\plugins\com.ibm.ws.security.crypto.jar
+<WAS_HOME>\plugins\com.ibm.ws.runtime.jar
+<WAS_HOME>\plugins\com.ibm.ws.admin.core.jar
+<WAS_HOME>\plugins\com.ibm.ws.admin.services.jarA fonte de dados para o acesso ao DB2 é criada no endereço JNDI "jdbc/SAMPLE", e os                drivers irão apontar para o caminho especificado pela propriedade                     jdbcClasspath.Após rodar a classe, você poderá ver através do console do Webphere a aplicação                instalada:Ilustração 1: Applications > All                    applicationsE o provedor de dados:Ilustração 2: Resources > JDBC > JDBC                    providersA aplicação poderá ser acessada através da url http://localhost:9083/sample/.Ilustração 3: Aplicação em                    http://localhost:9083/sample/Voltar para parte superiorConclusãoNeste artigo discutimos como realizar programaticamente as principais atividades para                a configuração e instalação de uma aplicação de exemplo no Websphere Application                Server (Base ou ND). Entre as principais atividades discutidas estão a criação do                provedor JDBC e a fonte de dados utilizada pela aplicação, o mapeamento de                servidores e papéis, a instalação da aplicação e a verificação de distribuição.O instalador de exemplo disponível para download pode ser utilizado como um ponto de                início para o instalador da sua aplicação.Voltar para parte superiorReferênciasEncontre mais informações sobre JMX em Java Management Extensions (JMX) TechnologyEncontre mais informações sobre administração de aplicações no centro de                    informações do Websphere: Managing applications through programmingEncontre mais informações sobre a monitoração do Websphere um ambiente                    distribuído em Monitoring an IBM WebSphere Extended Deployment environmentEncontre mais informações sobre configuração de clusters em IBM WebSphere Application Server - Administration and configuration                        guideAdicionado usuários e grupos a papéis através de uma ferramenta de                        assemblyCriando e configurando um provedor JDBC e uma fonte de dados através da API                        JMX
