@@ -1,0 +1,62 @@
+public static DataSet CsvToDataSet()
+{
+    //Arquivo CSV
+    string strFile = HttpContext.Current.Server.MapPath("~/contatos.csv");
+    //Separador do seu arquivo CSV 
+    char separator = ';';
+    //Se a primeira linha contém o nome das colunas
+    bool isRowOneHeader = true;
+
+    DataTable csvDataTable = new DataTable();
+    String[] csvData = File.ReadAllLines(strFile);
+
+    //Se o arquivo .csv não está vazio
+    if (csvData.Length > 0)
+    {
+        String[] headings = csvData[0].Split(separator);
+        int intRowIndex = 0;
+
+        //Se a primeira linha contém o nome das colunas
+        if (isRowOneHeader)
+        {
+            for (int i = 0; i < headings.Length; i++)
+            {
+                //Adiciona colunas ao DataTable
+                csvDataTable.Columns.Add(headings[i].ToString());
+            }
+
+            intRowIndex++;
+        }
+        //Se a primeira linha não contém o nome das colunas, 
+        //adiciona colunas como "Coluna1", "Coluna2", etc.
+        else
+        {
+            for (int i = 0; i < headings.Length; i++)
+            {
+                csvDataTable.Columns.Add("Coluna" + (i + 1).ToString());
+            }
+        }
+
+        //Popula o DataTable
+        for (int i = intRowIndex; i < csvData.Length; i++)
+        {
+            //Cria uma nova linha
+            DataRow row = csvDataTable.NewRow();
+
+            for (int j = 0; j < headings.Length; j++)
+            {
+                //Adiciona os valores de cada coluna
+                row[j] = csvData[i].Split(separator)[j];
+            }
+
+            //Adiciona a linha ao DataTable
+            csvDataTable.Rows.Add(row);
+        }
+    }
+
+    //Cria o DataSet e adiciona o DataTable nele
+    DataSet myDataSet = new DataSet();
+    myDataSet.Tables.Add(csvDataTable);
+
+    return myDataSet;
+}
