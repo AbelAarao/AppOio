@@ -1,8 +1,4 @@
 
 # Apoio - Aplicativo de Apoio ao Desenvolvedor
 
-AppOio.txt projeto appoio.zip
-
-Projb64 Projeto b64.zip
-
-form1.cs - projeto b64
+Ferramental de Apoio ao Desenvolvedor em consultas, monitoração e interações com o SO e o Banco de Dados.
